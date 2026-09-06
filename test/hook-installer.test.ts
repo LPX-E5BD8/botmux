@@ -126,8 +126,25 @@ describe('installHook — claude-settings', () => {
     const botmuxReady = ss.filter((g) => g.hooks?.some((e: any) => e.command.includes('cli.js') && e.command.trimEnd().endsWith('session-ready')));
     expect(botmuxReady.length).toBe(1);
     expect(botmuxReady[0].hooks[0].command).toBe(readyCmd2);
-    expect(hasInstalledSessionReadyHook(hookInstall)).toBe(false);
+    expect(hasInstalledSessionReadyHook(hookInstall)).toBe(true);
     expect(hasInstalledSessionReadyHook({ ...hookInstall, sessionStartCommand: readyCmd2 })).toBe(true);
+  });
+
+  it('ready preflight recognizes a standalone hook after switching to a Node launch path', () => {
+    mkdirSync(join(tmpDir, '.claude'), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: 'command', command: '/home/u/.botmux/bin/botmux session-ready' }] },
+        ],
+      },
+    }));
+
+    expect(hasInstalledSessionReadyHook({
+      configPath,
+      format: 'claude-settings',
+      sessionStartCommand: '/usr/bin/node /opt/botmux/dist/cli.js session-ready',
+    })).toBe(true);
   });
 
   it('ready preflight fails closed for malformed or unrelated SessionStart config', () => {
@@ -137,6 +154,22 @@ describe('installHook — claude-settings', () => {
         SessionStart: [
           { matcher: 'malformed-without-hooks' },
           { hooks: [{ type: 'command', command: '/usr/bin/unrelated-ready-hook' }] },
+        ],
+      },
+    }));
+    expect(hasInstalledSessionReadyHook({
+      configPath,
+      format: 'claude-settings',
+      sessionStartCommand: '/usr/bin/node /path/to/cli.js session-ready',
+    })).toBe(false);
+  });
+
+  it('ready preflight does not accept a third-party command with the same suffix', () => {
+    mkdirSync(join(tmpDir, '.claude'), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: 'command', command: '/usr/bin/botmux-helper session-ready' }] },
         ],
       },
     }));

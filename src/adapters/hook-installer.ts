@@ -284,19 +284,13 @@ export function hasInstalledSessionReadyHook(hookInstall: HookInstallConfig): bo
   }
   const settings = readJsonFile<ClaudeSettings>(expandHome(hookInstall.configPath));
   const groups = settings?.hooks?.SessionStart;
-  return Array.isArray(groups) && groups.some(group =>
-    Array.isArray(group?.hooks) && group.hooks.some(entry =>
-      entry?.type === 'command'
-      && entry.command === hookInstall.sessionStartCommand,
-    ),
-  );
+  return Array.isArray(groups) && groups.some(group => isBotmuxReadyHookGroup(group));
 }
 
 /**
  * Read-only preflight: is the botmux UserPromptSubmit hook present in the
- * settings file the CLI actually reads? 结构化匹配（不像
- * hasInstalledSessionReadyHook 那样按完整字符串相等——dev checkout 与 npm global
- * 的 cli.js 路径不同，精确匹配会把已安装的 hook 误判为未安装）。
+ * settings file the CLI actually reads? 与 SessionStart preflight 一样结构化匹配，
+ * 避免 dev checkout 与 npm global 的 cli.js 绝对路径差异造成误判。
  */
 export function hasInstalledPromptHook(hookInstall: HookInstallConfig): boolean {
   if (!hookInstall.userPromptSubmitCommand) return false;
