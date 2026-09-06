@@ -18439,7 +18439,7 @@ if(isTouch&&hasToken){(function(){
   // terminal and the box was cleared, and pressing Enter is literally step 3 of
   // the 上屏 → 检查 → Enter flow this bar is built around. sendBuffered() bails on
   // empty text, and the keydown handler has already called preventDefault(), so
-  // routing there would make the key vanish entirely. Send the \r the key-row ⏎
+  // routing there would make the key vanish entirely. Send the \\r the key-row ⏎
   // button already sends in this exact state — same reasoning as the empty-box
   // Backspace below: an empty box has no draft, so the key belongs to the terminal.
   function submit(){if(mode===LIVE)sendLiveCommit(true);else if(ta.value)sendBuffered();else sendInput('\\r');}
