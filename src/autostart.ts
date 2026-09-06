@@ -40,6 +40,8 @@ export interface AutostartOpts {
   /** Executable to name in the boot hook, for tests. Defaults to
    *  `process.execPath` (the Node binary, or the compiled binary itself). */
   execPath?: string;
+  /** PATH to persist in the boot hook, for tests. Defaults to `process.env.PATH`. */
+  environmentPath?: string;
 }
 
 /** Minimal registration state used by the Dashboard toggle. */
@@ -151,13 +153,25 @@ export function launchCommand(opts: AutostartOpts, sub: string, quote = false): 
   return (quote ? parts.map((p) => `"${p}"`) : parts).join(' ');
 }
 
-function currentPath(): string {
+export function autostartPath(
+  pathValue: string = process.env.PATH || '',
+  targetPlatform: NodeJS.Platform = process.platform,
+): string {
   // Capture PATH from the install-time shell so the unit can find any
   // binaries the user expects (node-pty's `node`, the AI CLI binaries,
-  // tmux, etc.). Falls back to a sane default if PATH is empty.
-  const p = process.env.PATH || '';
-  if (p) return p;
-  return process.platform === 'darwin'
+  // tmux, etc.). Session-scoped TRAE argv[0] shims live under a temporary
+  // directory and must not be made durable in a boot hook.
+  const separator = targetPlatform === 'win32' ? ';' : ':';
+  const entries = pathValue
+    .split(separator)
+    .filter(Boolean)
+    .filter(entry => !entry.replace(/\\/g, '/').includes('/.trae/tmp/arg0/'));
+  const stable = [...new Set(entries)].join(separator);
+  if (stable) return stable;
+  if (targetPlatform === 'win32') {
+    return '%SystemRoot%\\System32;%SystemRoot%;%SystemRoot%\\System32\\Wbem';
+  }
+  return targetPlatform === 'darwin'
     ? '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin'
     : '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 }
@@ -172,7 +186,7 @@ export function plistContent(opts: AutostartOpts): string {
     .map((p) => `        <string>${escapeXml(p)}</string>`)
     .join('\n');
   const cwd = escapeXml(opts.configDir);
-  const path = escapeXml(currentPath());
+  const path = escapeXml(autostartPath(opts.environmentPath, 'darwin'));
   const outLog = escapeXml(join(opts.logDir, 'autostart-out.log'));
   const errLog = escapeXml(join(opts.logDir, 'autostart-err.log'));
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -302,7 +316,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=${opts.configDir}
-Environment=PATH=${currentPath()}
+Environment=PATH=${autostartPath(opts.environmentPath, 'linux')}
 Environment=${AUTOSTART_UNIT_ENV}=1
 ExecStart=${launchCommand(opts, 'start')}
 ExecStop=${launchCommand(opts, 'stop')}
@@ -447,7 +461,7 @@ function windowsLogPath(opts: AutostartOpts, name: string): string {
 }
 
 export function windowsScriptContent(opts: AutostartOpts): string {
-  const path = escapeCmdValue(currentPath());
+  const path = escapeCmdValue(autostartPath(opts.environmentPath, 'win32'));
   const cwd = opts.configDir;
   const outLog = windowsLogPath(opts, 'autostart-out.log');
   const errLog = windowsLogPath(opts, 'autostart-err.log');
