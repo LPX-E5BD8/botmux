@@ -27,6 +27,26 @@ export function hasFlagOrEq(args: string[], flag: string): boolean {
   return args.some(a => a === flag || a.startsWith(flag + '='));
 }
 
+/** True when a value-taking flag is present without a usable value.
+ *
+ * Rejects the bare flag at argv end, an empty `--flag=` form, and a following
+ * flag token. A lone `-` remains a valid value for stdin-taking flags.
+ */
+export function flagPresentButValueMissing(
+  args: readonly string[],
+  flag: string,
+  allowDash = true,
+): boolean {
+  const i = args.findIndex(a => a === flag || a.startsWith(`${flag}=`));
+  if (i < 0) return false;
+  if (args[i].startsWith(`${flag}=`)) {
+    const value = args[i].slice(flag.length + 1);
+    return value === '' || (!allowDash && value === '-');
+  }
+  const next = args[i + 1];
+  return next === undefined || (next.startsWith('-') && !(allowDash && next === '-'));
+}
+
 /** The flag-looking tokens in `args` that this subcommand does not know.
  *
  *  Motivation: every parser in this file (and `argValue` / `argFlag` in cli.ts)
