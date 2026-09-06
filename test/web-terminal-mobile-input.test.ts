@@ -482,6 +482,71 @@ describe('手机 Web 终端输入栏', () => {
     expect(page.sentInputs()).toEqual([]);
   });
 
+  it('「上屏」之后输入框已空，系统键盘按 Enter 仍然要提交——两步语义的第 3 步不能蒸发', () => {
+    const page = bootMobileInput({ wsHasWrite: true });
+    page.textarea.value = '继续';
+    page.bar.dispatch('submit');
+    expect(page.sentInputs()).toEqual(['继续']);
+    expect(page.textarea.value).toBe('');
+
+    // 上屏 → 检查 → Enter is the whole point of buffer mode, and after 上屏 the
+    // box is empty by design. sendBuffered() bails on empty text while the
+    // keydown handler has already called preventDefault(), so without the empty
+    // box branch this key vanishes with no fallback — the user watches 上屏 put
+    // the text on the terminal and then cannot run it from the system keyboard.
+    page.textarea.dispatch('keydown', { key: 'Enter' });
+    expect(page.sentInputs()).toEqual(['继续', '\r']);
+  });
+
+  it('同一状态下系统键盘 Enter 与底栏 ⏎ 必须发出同一个字节，两种模式都一致', () => {
+    // The defect this pins is an inconsistency between two entry points in one
+    // visible state, which is the same shape as the Backspace gap above: the
+    // key-row ⏎ worked after 上屏 while the system keyboard did nothing.
+    const viaKeyboard = (live: boolean): string[] => {
+      const page = bootMobileInput({ wsHasWrite: true });
+      if (live) page.controls.find(control => control.id === 'mobile-mode')?.dispatch('click');
+      page.textarea.value = '';
+      page.textarea.dispatch('keydown', { key: 'Enter' });
+      return page.sentInputs();
+    };
+    const viaButton = (live: boolean): string[] => {
+      const page = bootMobileInput({ wsHasWrite: true });
+      if (live) page.controls.find(control => control.id === 'mobile-mode')?.dispatch('click');
+      page.textarea.value = '';
+      page.shortcut('enter')?.dispatch('click');
+      return page.sentInputs();
+    };
+    expect(viaKeyboard(false)).toEqual(['\r']);
+    expect(viaButton(false)).toEqual(['\r']);
+    expect(viaKeyboard(true)).toEqual(['\r']);
+    expect(viaButton(true)).toEqual(['\r']);
+  });
+
+  it('输入法组合中按删除键不转发给终端，待选草稿的退格只能编辑草稿', () => {
+    // Load-bearing guard with no coverage before this: dropping
+    // `!mirror.composing && !e.isComposing` still left every other case green,
+    // but a Chinese/Japanese IME candidate-editing backspace would then eat a
+    // terminal character instead of editing the pending draft.
+    for (const live of [false, true]) {
+      // composition tracked through compositionstart (mirror.composing)
+      const viaEvent = bootMobileInput({ wsHasWrite: true });
+      if (live) viaEvent.controls.find(control => control.id === 'mobile-mode')?.dispatch('click');
+      const baseline = viaEvent.sentInputs().length;
+      viaEvent.textarea.dispatch('compositionstart');
+      viaEvent.textarea.value = '';
+      viaEvent.textarea.dispatch('keydown', { key: 'Backspace' });
+      expect(viaEvent.sentInputs().length, `composing backspace leaked (live=${live})`).toBe(baseline);
+
+      // …and through the event's own isComposing flag
+      const viaFlag = bootMobileInput({ wsHasWrite: true });
+      if (live) viaFlag.controls.find(control => control.id === 'mobile-mode')?.dispatch('click');
+      const flagBaseline = viaFlag.sentInputs().length;
+      viaFlag.textarea.value = '';
+      viaFlag.textarea.dispatch('keydown', { key: 'Backspace', isComposing: true });
+      expect(viaFlag.sentInputs().length, `isComposing backspace leaked (live=${live})`).toBe(flagBaseline);
+    }
+  });
+
   it('切进实时模式时，输入框里没上屏的文字要送上终端而不是隐形留着', () => {
     const page = bootMobileInput({ wsHasWrite: true });
     page.textarea.value = 'hello';

@@ -18398,11 +18398,11 @@ if(isTouch&&hasToken){(function(){
     mirror.sent=mirror.held='';ta.value='';resizeTa();return true;}
 
   // Buffer mode types the text into the CLI's own input box WITHOUT submitting
-  // (the payload ends in a newline, which a TUI treats as "insert", not "run"),
-  // so the button is labelled 上屏 there and the user presses the Enter key once
-  // the text looks right. Live mode's button really does submit (it appends a
-  // carriage return), so it keeps 发送 — same reason the mode button spells out
-  // the extra Enter step.
+  // (it sends the text and nothing else — no trailing newline, which a TUI would
+  // insert as a literal line break rather than run), so the button is labelled
+  // 上屏 there and the user presses the Enter key once the text looks right. Live
+  // mode's button really does submit (it appends a carriage return), so it keeps
+  // 发送 — same reason the mode button spells out the extra Enter step.
   function setMode(m){mode=m;bar.setAttribute('data-mode',m);
     modeBtn.textContent=m===LIVE?'实时':'缓冲';
     sendBtn.textContent=m===LIVE?'发送':'上屏';
@@ -18435,7 +18435,14 @@ if(isTouch&&hasToken){(function(){
     showKeyboard();}
   function sendLiveCommit(appendEnter){
     if(sendLiveKey(appendEnter?'\\r':''))showKeyboard();}
-  function submit(){if(mode===LIVE)sendLiveCommit(true);else sendBuffered();}
+  // An EMPTY box in buffer mode still has to submit: after 上屏 the text is on the
+  // terminal and the box was cleared, and pressing Enter is literally step 3 of
+  // the 上屏 → 检查 → Enter flow this bar is built around. sendBuffered() bails on
+  // empty text, and the keydown handler has already called preventDefault(), so
+  // routing there would make the key vanish entirely. Send the \r the key-row ⏎
+  // button already sends in this exact state — same reasoning as the empty-box
+  // Backspace below: an empty box has no draft, so the key belongs to the terminal.
+  function submit(){if(mode===LIVE)sendLiveCommit(true);else if(ta.value)sendBuffered();else sendInput('\\r');}
 
   // shortcut keys row
   var sk={ctrlc:'\\x03',esc:'\\x1b',tab:'\\t',left:'\\x1b[D',right:'\\x1b[C',up:'\\x1b[A',down:'\\x1b[B',bs:'\\x7f',enter:'\\r',stab:'\\x1b[Z'};
