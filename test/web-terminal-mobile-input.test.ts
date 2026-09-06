@@ -62,7 +62,11 @@ class FakeElement {
   }
 
   querySelectorAll(selector: string): FakeElement[] {
-    return selector === 'button,textarea' ? this.descendants : [];
+    if (selector === 'button,textarea') return this.descendants;
+    // The bar cancels pointerdown on its buttons only — the textarea must keep
+    // taking focus, so this selector deliberately excludes it.
+    if (selector === 'button') return this.descendants.filter(node => node.id !== 'mobile-input');
+    return [];
   }
 }
 
@@ -565,6 +569,45 @@ describe('手机 Web 终端输入栏', () => {
     // With the box actually empty, the very next Backspace reaches the terminal.
     page.textarea.dispatch('keydown', { key: 'Backspace' });
     expect(page.sentInputs()).toEqual(['hello', '\x7f']);
+  });
+
+  it('点底栏按钮不会让输入框失焦——失焦会收起系统键盘、底栏整体下移导致点错', () => {
+    const page = bootMobileInput({ wsHasWrite: true });
+
+    // The regression this pins: a button tap moved focus mobile-input → BODY
+    // (measured in a real browser). iOS retracts the software keyboard the
+    // instant the focused element blurs, and this bar rides above the keyboard
+    // (transform: -var(--keyboard-inset)), so the whole bar drops ~300px while
+    // the finger is still down — the next button is no longer where the user
+    // aimed. Cancelling pointerdown suppresses the pointer-driven focus
+    // transfer without touching click / submit / :active / row scrolling.
+    const prevented: Array<string | null> = [];
+    for (const control of page.controls) {
+      control.dispatch('pointerdown', { preventDefault: () => prevented.push(control.id) });
+    }
+
+    // Every button cancels it…
+    expect(prevented).toEqual(
+      page.controls.filter(control => control.id !== 'mobile-input').map(control => control.id),
+    );
+    // …and the textarea deliberately does NOT: it has to keep taking focus and
+    // placing the caret where the finger landed.
+    expect(prevented).not.toContain('mobile-input');
+  });
+
+  it('抑制失焦不能顺带吃掉按钮本身的功能：click、上屏提交、长按重复都照旧', () => {
+    const page = bootMobileInput({ wsHasWrite: true });
+
+    // preventDefault on pointerdown does not cancel the click that follows, so
+    // every key still sends its sequence.
+    page.shortcut('bs')?.dispatch('pointerdown');
+    page.shortcut('bs')?.dispatch('click');
+    expect(page.sentInputs()).toEqual(['\x7f']);
+
+    // 上屏 is type="submit"; the form submit still fires.
+    page.textarea.value = 'hi';
+    page.bar.dispatch('submit');
+    expect(page.sentInputs()).toEqual(['\x7f', 'hi']);
   });
 
   it('底栏按钮抑制 iOS 长按选中与 callout，避免长按删除时弹出选择气泡', () => {

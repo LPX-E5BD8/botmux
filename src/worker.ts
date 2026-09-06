@@ -18502,6 +18502,22 @@ if(isTouch&&hasToken){(function(){
     }
   })(keyBtns[i]);}
 
+  // Tapping ANY bar button must not blur the textarea. iOS retracts the
+  // software keyboard the moment the focused element loses focus, and this bar
+  // rides above the keyboard (transform: -var(--keyboard-inset)) — so the
+  // keyboard closing yanks the whole bar down by ~300px while the finger is
+  // still on the glass. The button the user aims at next has moved, which is
+  // exactly the mis-tap being reported. Cancelling pointerdown suppresses the
+  // pointer-initiated focus transfer; click, form submit, :active feedback and
+  // the key row's horizontal scroll all still work (verified in a real
+  // browser — Backspace/Ctrl-C/mode/上屏 all kept focus on #mobile-input).
+  // Buttons only: the textarea itself must keep focusing and placing its caret,
+  // and Tab focus is unaffected because only pointer-driven focus is cancelled.
+  var barBtns=bar.querySelectorAll('button');
+  for(var bbi=0;bbi<barBtns.length;bbi++){
+    barBtns[bbi].addEventListener('pointerdown',function(e){e.preventDefault();});
+  }
+
   modeBtn.addEventListener('click',function(){modeBtn.blur();
     // switching away from live flushes pending held text
     if(mode===LIVE&&!sendLiveKey(''))return;
