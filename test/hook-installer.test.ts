@@ -147,6 +147,26 @@ describe('installHook — claude-settings', () => {
     })).toBe(true);
   });
 
+  it.each([
+    '/repo/dist-bin/botmux-linux-x64 session-ready',
+    '/repo/dist-bin/botmux-future-riscv64 session-ready',
+  ])('ready preflight preserves an exact command match: %s', (installedCommand) => {
+    mkdirSync(join(tmpDir, '.claude'), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: 'command', command: installedCommand }] },
+        ],
+      },
+    }));
+
+    expect(hasInstalledSessionReadyHook({
+      configPath,
+      format: 'claude-settings',
+      sessionStartCommand: installedCommand,
+    })).toBe(true);
+  });
+
   it('ready preflight fails closed for malformed or unrelated SessionStart config', () => {
     mkdirSync(join(tmpDir, '.claude'), { recursive: true });
     writeFileSync(configPath, JSON.stringify({
@@ -213,7 +233,7 @@ describe('installHook — claude-settings', () => {
     const botmuxUps = ups.filter((g) => g.hooks?.some((e: any) => e.command.includes('cli.js') && e.command.trimEnd().endsWith('user-prompt-hook')));
     expect(botmuxUps.length).toBe(1);
     expect(botmuxUps[0].hooks[0].command).toBe(promptCmd2);
-    // 结构化识别：换路径后 preflight 仍为 true（与 hasInstalledSessionReadyHook 的精确字符串匹配不同）
+    // 结构化识别：换路径后 preflight 仍为 true。
     expect(hasInstalledPromptHook({ configPath, format: 'claude-settings', userPromptSubmitCommand: promptCmd2 })).toBe(true);
   });
 

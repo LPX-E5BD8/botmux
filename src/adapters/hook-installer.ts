@@ -284,7 +284,17 @@ export function hasInstalledSessionReadyHook(hookInstall: HookInstallConfig): bo
   }
   const settings = readJsonFile<ClaudeSettings>(expandHome(hookInstall.configPath));
   const groups = settings?.hooks?.SessionStart;
-  return Array.isArray(groups) && groups.some(group => isBotmuxReadyHookGroup(group));
+  return Array.isArray(groups) && groups.some(group =>
+    isBotmuxReadyHookGroup(group)
+    // Preserve the old exact-match fallback for a current command whose
+    // executable basename is newer than the structural whitelist. This keeps
+    // path-switch recognition broad without regressing the simplest case:
+    // the configured command is exactly the one installed in settings.
+    || (Array.isArray(group?.hooks) && group.hooks.some(entry =>
+      entry?.type === 'command'
+      && entry.command === hookInstall.sessionStartCommand,
+    )),
+  );
 }
 
 /**
