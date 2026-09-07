@@ -142,7 +142,8 @@ function isBotmuxHookCommand(command: string, suffix: string): boolean {
   return basename === 'cli.js'
     || basename === 'botmux'
     || basename === 'botmux.exe'
-    || /^botmux-(?:linux|darwin)-(?:x64|arm64)(?:-musl)?$/.test(basename)
+    || /^botmux-linux-(?:x64|arm64)(?:-musl)?$/.test(basename)
+    || /^botmux-darwin-(?:x64|arm64)$/.test(basename)
     || /^botmux-windows-(?:x64|arm64)(?:\.exe)?$/.test(basename);
 }
 

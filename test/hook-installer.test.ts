@@ -167,9 +167,19 @@ describe('installHook — claude-settings', () => {
     })).toBe(true);
   });
 
-  it('识别 dev dist-bin 的平台二进制并保持三类 hook 幂等', () => {
-    const first = '/repo/dist-bin/botmux-linux-x64';
-    const second = '/repo/dist-bin/botmux-darwin-arm64';
+  it.each([
+    '/repo/dist-bin/botmux-linux-x64',
+    '/repo/dist-bin/botmux-linux-arm64',
+    '/repo/dist-bin/botmux-linux-x64-musl',
+    '/repo/dist-bin/botmux-linux-arm64-musl',
+    '/repo/dist-bin/botmux-darwin-x64',
+    '/repo/dist-bin/botmux-darwin-arm64',
+    'C:\\repo\\dist-bin\\botmux-windows-x64',
+    'C:\\repo\\dist-bin\\botmux-windows-x64.exe',
+    'C:\\repo\\dist-bin\\botmux-windows-arm64',
+    'C:\\repo\\dist-bin\\botmux-windows-arm64.exe',
+  ])('识别 dev dist-bin 产物并保持三类 hook 幂等: %s', (first) => {
+    const second = '/opt/botmux/bin/botmux';
     const firstInstall = {
       configPath,
       format: 'claude-settings' as const,
@@ -191,25 +201,6 @@ describe('installHook — claude-settings', () => {
     }
   });
 
-  it('识别 Windows dev binary 的可选 exe 后缀', () => {
-    for (const basename of ['botmux-windows-x64', 'botmux-windows-arm64.exe']) {
-      const installed = {
-        configPath,
-        format: 'claude-settings' as const,
-        sessionStartCommand: `C:\repo\dist-bin\${basename} session-ready`,
-      };
-      installHook('claude-code', installed, `C:\repo\dist-bin\${basename} hook claude-code`);
-      installHook('claude-code', {
-        ...installed,
-        sessionStartCommand: '/repo/dist-bin/botmux-linux-x64 session-ready',
-      }, '/repo/dist-bin/botmux-linux-x64 hook claude-code');
-
-      const groups = JSON.parse(readFileSync(configPath, 'utf-8')).hooks.SessionStart;
-      expect(groups).toHaveLength(1);
-      expect(groups[0].hooks).toHaveLength(1);
-    }
-  });
-
   it.each([
     'botmux-helper',
     'botmux-wrapper',
@@ -217,7 +208,11 @@ describe('installHook — claude-settings', () => {
     'botmux-x64',
     'botmux-linux-x64-extra',
     'botmux-linux-x64.exe',
+    'botmux-linux-arm64-musl.exe',
     'botmux-darwin-arm64.exe',
+    'botmux-darwin-arm64-musl',
+    'botmux-windows-x64-musl',
+    'botmux-windows-arm64-musl.exe',
   ])('不把第三方同前缀程序 %s 当成 botmux hook', (basename) => {
     const thirdPartyCommand = `/usr/local/bin/${basename} session-ready`;
     mkdirSync(join(tmpDir, '.claude'), { recursive: true });
@@ -225,11 +220,16 @@ describe('installHook — claude-settings', () => {
       hooks: { SessionStart: [{ hooks: [{ type: 'command', command: thirdPartyCommand }] }] },
     }));
 
-    expect(hasInstalledSessionReadyHook({
+    const currentBinary = '/repo/dist-bin/botmux-linux-x64';
+    installHook('claude-code', {
       configPath,
       format: 'claude-settings',
-      sessionStartCommand: '/repo/dist-bin/botmux-linux-x64 session-ready',
-    })).toBe(false);
+      sessionStartCommand: `${currentBinary} session-ready`,
+    }, `${currentBinary} hook claude-code`);
+
+    const commands = JSON.parse(readFileSync(configPath, 'utf-8'))
+      .hooks.SessionStart.flatMap((group: any) => group.hooks.map((entry: any) => entry.command));
+    expect(commands).toContain(thirdPartyCommand);
   });
 
   it('ready preflight fails closed for malformed or unrelated SessionStart config', () => {
