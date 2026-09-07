@@ -181,11 +181,25 @@ describe('autostart boot hook — compiled binary (standalone) shape', () => {
 });
 
 describe('autostart PATH normalization', () => {
-  it('filters TRAE argv0 shims, preserves order, and removes duplicates on POSIX', () => {
+  it('filters AI CLI argv0 shims, preserves order, and removes duplicates on POSIX', () => {
     expect(autostartPath(
-      '/home/u/.trae/tmp/arg0/traecli-a:/home/u/.local/bin:/usr/bin:/home/u/.local/bin',
+      [
+        '/home/u/.trae/tmp/arg0/traecli-a',
+        '/home/u/.trae/cli/tmp/arg0/traecli-b',
+        '/home/u/.codex/tmp/arg0/codex-execve-wrapper',
+        '/home/u/.local/bin',
+        '/usr/bin',
+        '/home/u/.local/bin',
+      ].join(':'),
       'linux',
     )).toBe('/home/u/.local/bin:/usr/bin');
+  });
+
+  it('requires tmp/arg0 to be a complete path segment', () => {
+    expect(autostartPath(
+      '/opt/tmp/arg0bin:/usr/tmp/arg00:/var/tmp/arg0-tools/bin',
+      'linux',
+    )).toBe('/opt/tmp/arg0bin:/usr/tmp/arg00:/var/tmp/arg0-tools/bin');
   });
 
   it('uses the platform delimiter when filtering Windows PATH', () => {
@@ -200,6 +214,20 @@ describe('autostart PATH normalization', () => {
       .toBe('/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');
     expect(autostartPath('C:\\Users\\u\\.trae\\tmp\\arg0\\traecli-a', 'win32'))
       .toBe('%SystemRoot%\\System32;%SystemRoot%;%SystemRoot%\\System32\\Wbem');
+  });
+
+  it('expands the Windows fallback but keeps captured percent references literal', () => {
+    const transient = 'C:\\Users\\u\\.codex\\tmp\\arg0\\codex-execve-wrapper';
+    const fallbackScript = windowsScriptContent(opts({ environmentPath: transient }));
+    expect(fallbackScript).toContain(
+      'set "PATH=%SystemRoot%\\System32;%SystemRoot%;%SystemRoot%\\System32\\Wbem"',
+    );
+    expect(fallbackScript).not.toContain('%%SystemRoot%%');
+
+    const capturedScript = windowsScriptContent(opts({
+      environmentPath: '%LOCALAPPDATA%\\bin;C:\\Tools',
+    }));
+    expect(capturedScript).toContain('set "PATH=%%LOCALAPPDATA%%\\bin;C:\\Tools"');
   });
 });
 

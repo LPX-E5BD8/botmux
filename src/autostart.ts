@@ -52,6 +52,7 @@ export interface AutostartState {
 
 const LABEL = 'com.botmux.daemon';
 const SERVICE_NAME = 'botmux.service';
+const WINDOWS_FALLBACK_PATH = '%SystemRoot%\\System32;%SystemRoot%;%SystemRoot%\\System32\\Wbem';
 
 /**
  * Env marker the generated boot hooks set on themselves, so `botmux start` can
@@ -159,17 +160,18 @@ export function autostartPath(
 ): string {
   // Capture PATH from the install-time shell so the unit can find any
   // binaries the user expects (node-pty's `node`, the AI CLI binaries,
-  // tmux, etc.). Session-scoped TRAE argv[0] shims live under a temporary
-  // directory and must not be made durable in a boot hook.
+  // tmux, etc.). Session-scoped argv[0] shims from TRAE, Codex, and other AI
+  // CLIs live under a `tmp/arg0` path segment and must not be made durable in
+  // a boot hook.
   const separator = targetPlatform === 'win32' ? ';' : ':';
   const entries = pathValue
     .split(separator)
     .filter(Boolean)
-    .filter(entry => !entry.replace(/\\/g, '/').includes('/.trae/tmp/arg0/'));
+    .filter(entry => !entry.replace(/\\/g, '/').includes('/tmp/arg0/'));
   const stable = [...new Set(entries)].join(separator);
   if (stable) return stable;
   if (targetPlatform === 'win32') {
-    return '%SystemRoot%\\System32;%SystemRoot%;%SystemRoot%\\System32\\Wbem';
+    return WINDOWS_FALLBACK_PATH;
   }
   return targetPlatform === 'darwin'
     ? '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin'
@@ -433,6 +435,14 @@ function escapeCmdValue(s: string): string {
   return s.replace(/\^/g, '^^').replace(/%/g, '%%');
 }
 
+function windowsPathValue(pathValue: string | undefined): string {
+  const normalized = autostartPath(pathValue, 'win32');
+  // The fallback deliberately contains expandable %SystemRoot% references.
+  // Captured PATH values must stay literal, but escaping the fallback would
+  // turn those references into literal text when cmd.exe executes the script.
+  return normalized === WINDOWS_FALLBACK_PATH ? normalized : escapeCmdValue(normalized);
+}
+
 function escapeVbsString(s: string): string {
   return s.replace(/"/g, '""');
 }
@@ -461,7 +471,7 @@ function windowsLogPath(opts: AutostartOpts, name: string): string {
 }
 
 export function windowsScriptContent(opts: AutostartOpts): string {
-  const path = escapeCmdValue(autostartPath(opts.environmentPath, 'win32'));
+  const path = windowsPathValue(opts.environmentPath);
   const cwd = opts.configDir;
   const outLog = windowsLogPath(opts, 'autostart-out.log');
   const errLog = windowsLogPath(opts, 'autostart-err.log');
